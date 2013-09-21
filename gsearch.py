@@ -2,10 +2,11 @@
 #-*- coding: utf-8 -*-
 #
 # Create by Meibenjin. 
+# Modified by kerneltravel
 #
-# Last updated: 2013-04-02
+# Last updated: 2013-09-21
 #
-# google search results crawler 
+# soso.com search results crawler 
 
 import sys
 reload(sys)
@@ -16,7 +17,7 @@ import re, random, types
 
 from bs4 import BeautifulSoup 
 
-base_url = 'https://www.google.com.hk/'
+base_url = 'http://www.soso.com'
 
 user_agents = ['Mozilla/5.0 (Windows NT 6.1; WOW64; rv:23.0) Gecko/20130406 Firefox/23.0', \
         'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:18.0) Gecko/20100101 Firefox/18.0', \
@@ -58,9 +59,9 @@ class SearchResult:
         self.content = content
 
     def printIt(self, prefix = ''):
-        print 'url\t->', self.url
-        print 'title\t->', self.title
-        print 'content\t->', self.content
+        print 'url\t->', self.url.decode('utf-8')
+        print 'title\t->', self.title.decode('utf-8')
+        print 'content\t->', self.content.decode('utf-8')
         print 
 
     def writeFile(self, filename):
@@ -99,13 +100,13 @@ class GoogleAPI:
     def extractSearchResults(self, html):
         results = list()
         soup = BeautifulSoup(html)
-        div = soup.find('div', id  = 'search')
+        div = soup.find('div', attrs={'id':'result', 'class':'result'} )
         if (type(div) != types.NoneType):
-            lis = div.findAll('li', {'class': 'g'})
+            lis = div.findAll('li')
             if(len(lis) > 0):
                 for li in lis:
                     result = SearchResult()
-                    h3 = li.find('h3', {'class': 'r'})
+                    h3 = li.find('h3')
                     if(type(h3) == types.NoneType):
                         continue
 
@@ -115,18 +116,37 @@ class GoogleAPI:
                         continue
 
                     url = link['href']
-                    url = self.extractDomain(url)
+                    #url = self.extractDomain(url)
                     if(cmp(url, '') == 0):
                         continue
                     title = link.renderContents()
+                    title = title.replace("<em>",'').replace("</em>",'')
                     result.setURL(url)
                     result.setTitle(title)
 
-                    span = li.find('span', {'class': 'st'})
+                    span = li.find('p', {'class': 'ds'})
                     if (type(span) != types.NoneType):
                         content = span.renderContents()
+                        content = content.replace("<em>",'').replace("</em>",'').replace('...','')
                         result.setContent(content)
                     results.append(result)
+        return results
+
+    # search web of pageId page 
+    # @param url of main search url 
+    # @param pageId -> index of search results page
+    def searchPerPage(self, urltmp, pageId):
+        url = "%s%d"%(urltmp,pageId)
+        #print 'url: %s'%url
+        request = urllib2.Request(url)
+        length = len(user_agents)
+        index = random.randint(0, length-1)
+        user_agent = user_agents[index] 
+        request.add_header('User-agent', user_agent)
+        request.add_header('connection','keep-alive')
+        response = urllib2.urlopen(request)
+        html = response.read() 
+        results = self.extractSearchResults(html)
         return results
 
     # search web
@@ -135,22 +155,26 @@ class GoogleAPI:
     # @param num -> number of search results to return 
     def search(self, query, lang='en', num=10):
         query = urllib2.quote(query)
+        #print 'query: %s, base:%s'%(query,base_url)
         search_results = list()
-        url = '%s/search?hl=%s&num=%d&q=%s' % (base_url, lang, num, query)
+        pageId = 1
+        #url = '%s/search?hl=%s&num=%d&q=%s' % (base_url, lang, num, query)
+        url = '%s/q?w=%s%%20site%%3Apan.baidu.com&lr=&sc=web&ch=w.p&num=%d&gid=&cin=&site=&sf=0&sd=0&nf=&pg='%(base_url, query, num)
+        #print 'url %s'%url
         str = ''
         retry = 3
         while(retry > 0):
             try:
-                request = urllib2.Request(url)
-                length = len(user_agents)
-                index = random.randint(0, length-1)
-                user_agent = user_agents[index] 
-                request.add_header('User-agent', user_agent)
-                request.add_header('connection','keep-alive')
-                response = urllib2.urlopen(request)
-                html = response.read() 
-                results = self.extractSearchResults(html)
-                return results
+                results = self.searchPerPage(url,pageId)
+                while (len(results)>0):
+                    pageId += 1
+                    search_results += results
+                    if len(results)<(num/2): #no need to search next page if curpage result less then half of num. cur page is the last page
+                        break
+                    results = list()
+                    results = self.searchPerPage(url,pageId)
+                    #print 'results len: %d,%d'%(len(results),pageId)
+                return search_results
             except urllib2.URLError,e:
                 print 'url error:', e
                 self.randomSleep()
@@ -173,6 +197,9 @@ def test():
     result = api.search(query)
     for r in result:
         r.printIt()
+    print 'result len: %d'%len(result)
+    #result_s = set(result)
+    #print 'result len: %d'%len(result_s)
 
 if __name__ == '__main__':
     test()
