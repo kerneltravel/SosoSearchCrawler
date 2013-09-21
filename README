@@ -9,7 +9,7 @@ visit:
         http://www.crummy.com/software/BeautifulSoup/
 
 2.  The basic use of this tool
-        $python gsearch.py 'your query key words' 
+        $python sosearch.py 'your query key words' 
 it will return about ALL the extracted results. It's very easy to modify to meet your needs.
 
 3. If there are any problems or bugs about this tool, please contact me.
